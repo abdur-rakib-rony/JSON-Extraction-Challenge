@@ -48,16 +48,17 @@ app.post(
       }
 
       try {
+        // Updated regex to handle multi-line JSON
         const jsonMatch = imageBase64.match(
-          /"name"\s*:\s*"((?:[^"]|\\")+)".+"organization"\s*:\s*"((?:[^"]|\\")+)".+"address"\s*:\s*"((?:[^"]|\\")+)".+"mobile"\s*:\s*"((?:[^"]|\\")+)"/
+          /"name"\s*:\s*"((?:[^"]|\\.)*)"[\s\S]+?"organization"\s*:\s*"((?:[^"]|\\.)*)"[\s\S]+?"address"\s*:\s*"((?:[^"]|\\.)*)"[\s\S]+?"mobile"\s*:\s*"((?:[^"]|\\.)*)"/
         );
 
         if (jsonMatch) {
           const extractedData = {
-            name: jsonMatch[1].replace(/0(?=')/g, "O"),
-            organization: jsonMatch[2].replace(/0(?=')/g, "O"),
+            name: jsonMatch[1], // Removed replacement
+            organization: jsonMatch[2], // Removed replacement
             address: jsonMatch[3],
-            mobile: jsonMatch[4].replace(/[{}]/g, ""),
+            mobile: jsonMatch[4], // Removed replacement
           };
 
           return res.json({
@@ -91,17 +92,7 @@ app.post(
       const jsonText = improvedJsonExtract(text);
       const extractedData = JSON.parse(jsonText) as ExtractedData;
 
-      // Post-processing corrections
-      extractedData.name = extractedData.name.replace(/0(?=')/g, "O");
-      extractedData.organization = extractedData.organization.replace(
-        /0(?=')/g,
-        "O"
-      );
-      extractedData.mobile = extractedData.mobile
-        .replace(/[{}]/g, "")
-        .replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
-        .replace(/(x\d+)/, " $1");
-
+      // Removed all post-processing corrections
       return res.json({
         success: true,
         data: extractedData,
@@ -137,10 +128,9 @@ function improvedJsonExtract(text: string) {
       }
     }
 
-    const nameMatch = text.match(/name["']?\s*:\s*["']([^"']*'?[^"']*)["']/i);
-    const orgMatch = text.match(
-      /organization["']?\s*:\s*["']([^"']*'?[^"']*)["']/i
-    );
+    // Simplified regex to capture entire values
+    const nameMatch = text.match(/name["']?\s*:\s*["']([^"']*)["']/i);
+    const orgMatch = text.match(/organization["']?\s*:\s*["']([^"']*)["']/i);
     const addressMatch = text.match(/address["']?\s*:\s*["']([^"']+)["']/i);
     const mobileMatch = text.match(/mobile["']?\s*:\s*["']([^"']+)["']/i);
 
@@ -160,39 +150,6 @@ function improvedJsonExtract(text: string) {
       ) {
         return JSON.stringify(result);
       }
-    }
-
-    const lines = text.split(/[\n\r]+/);
-    let extractedData: {
-      name?: string;
-      organization?: string;
-      address?: string;
-      mobile?: string;
-    } = {};
-
-    for (const line of lines) {
-      if (line.includes("name") && !extractedData.name) {
-        const match = line.match(/:\s*["']?([^"',}]+'?[^"',}]*)["']?[,}]/);
-        if (match) extractedData.name = match[1].trim();
-      } else if (line.includes("organization") && !extractedData.organization) {
-        const match = line.match(/:\s*["']?([^"',}]+'?[^"',}]*)["']?[,}]/);
-        if (match) extractedData.organization = match[1].trim();
-      } else if (line.includes("address") && !extractedData.address) {
-        const match = line.match(/:\s*["']?([^"',}]+)["']?[,}]/);
-        if (match) extractedData.address = match[1].trim();
-      } else if (line.includes("mobile") && !extractedData.mobile) {
-        const match = line.match(/:\s*["']?([^"',}]+)["']?[,}]/);
-        if (match) extractedData.mobile = match[1].trim();
-      }
-    }
-
-    if (
-      extractedData.name &&
-      extractedData.organization &&
-      extractedData.address &&
-      extractedData.mobile
-    ) {
-      return JSON.stringify(extractedData);
     }
 
     throw new Error("Could not extract JSON data from image");
