@@ -88,52 +88,36 @@ function improvedJsonExtract(text: string): string {
   const standardMatch = text.match(/\{[\s\S]*\}/);
   if (standardMatch) {
     try {
-      JSON.parse(standardMatch[0]);
-      return standardMatch[0];
+      const jsonObj = JSON.parse(standardMatch[0]);
+      return JSON.stringify(jsonObj);
     } catch (e) {
-      console.log("cleanup for parsing failed");
+      console.log(e);
     }
   }
 
   try {
-    let cleanText = text.replace(/[^\{\}\"\:\,\.\-\_a-zA-Z0-9\+\s]/g, "");
+    const nameRegex = /"name"\s*:\s*"([^"]*)"/;
+    const orgRegex = /"organization"\s*:\s*"([^"]*)"/;
+    const addressRegex = /"address"\s*:\s*"([^"]*)"/;
+    const mobileRegex = /"mobile"\s*:\s*"([^"]*)"/;
 
-    const flexMatch = cleanText.match(/\{[\s\S]*\}/);
-    if (flexMatch) {
-      let jsonCandidate = flexMatch[0];
+    const nameMatch = text.match(nameRegex);
+    const orgMatch = text.match(orgRegex);
+    const addressMatch = text.match(addressRegex);
+    const mobileMatch = text.match(mobileRegex);
 
-      jsonCandidate = jsonCandidate
-        .replace(/["]+/g, '"')
-        .replace(/[']/g, '"')
-        .replace(/[`]/g, '"')
-        .replace(/(\w+):/g, '"$1":')
-        .replace(/:\s*"([^"]*)(\s*)$/gm, ': "$1",')
-        .replace(/,\s*\}/g, "}")
-        .replace(/"\s*\{/g, '{"')
-        .replace(/\}\s*"/g, ',"')
-        .replace(/\}\s*\{/g, "},{");
-
-      JSON.parse(jsonCandidate);
-      return jsonCandidate;
-    }
-
-    const nameMatch = text.match(/name[^a-zA-Z0-9]+(["']?)([^"']+)\1/i);
-    const orgMatch = text.match(/organization[^a-zA-Z0-9]+(["']?)([^"']+)\1/i);
-    const addressMatch = text.match(/address[^a-zA-Z0-9]+(["']?)([^"']+)\1/i);
-    const mobileMatch = text.match(/mobile[^a-zA-Z0-9]+(["']?)([^"']+)\1/i);
-
-    if (nameMatch || orgMatch || addressMatch || mobileMatch) {
+    if (nameMatch && orgMatch && addressMatch && mobileMatch) {
       const constructedJson = {
-        name: nameMatch ? nameMatch[2] : "",
-        organization: orgMatch ? orgMatch[2] : "",
-        address: addressMatch ? addressMatch[2] : "",
-        mobile: mobileMatch ? mobileMatch[2] : "",
+        name: nameMatch[1],
+        organization: orgMatch[1],
+        address: addressMatch[1],
+        mobile: mobileMatch[1],
       };
 
       return JSON.stringify(constructedJson);
     }
 
-    throw new Error("invalid json pattern");
+    throw new Error("Invalid JSON pattern");
   } catch (error: any) {
     throw new Error(error.message);
   }
