@@ -48,17 +48,16 @@ app.post(
       }
 
       try {
-        // Updated regex to handle multi-line JSON
         const jsonMatch = imageBase64.match(
           /"name"\s*:\s*"((?:[^"]|\\.)*)"[\s\S]+?"organization"\s*:\s*"((?:[^"]|\\.)*)"[\s\S]+?"address"\s*:\s*"((?:[^"]|\\.)*)"[\s\S]+?"mobile"\s*:\s*"((?:[^"]|\\.)*)"/
         );
 
         if (jsonMatch) {
           const extractedData = {
-            name: jsonMatch[1], // Removed replacement
-            organization: jsonMatch[2], // Removed replacement
+            name: jsonMatch[1],
+            organization: jsonMatch[2],
             address: jsonMatch[3],
-            mobile: jsonMatch[4], // Removed replacement
+            mobile: jsonMatch[4],
           };
 
           return res.json({
@@ -92,7 +91,6 @@ app.post(
       const jsonText = improvedJsonExtract(text);
       const extractedData = JSON.parse(jsonText) as ExtractedData;
 
-      // Removed all post-processing corrections
       return res.json({
         success: true,
         data: extractedData,
@@ -128,7 +126,6 @@ function improvedJsonExtract(text: string) {
       }
     }
 
-    // Simplified regex to capture entire values
     const nameMatch = text.match(/name["']?\s*:\s*["']([^"']*)["']/i);
     const orgMatch = text.match(/organization["']?\s*:\s*["']([^"']*)["']/i);
     const addressMatch = text.match(/address["']?\s*:\s*["']([^"']+)["']/i);
