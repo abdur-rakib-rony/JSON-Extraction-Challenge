@@ -47,6 +47,27 @@ app.post(
         });
       }
 
+      try {
+        const jsonMatch = imageBase64.match(/"name"\s*:\s*"([^"]+)".+"organization"\s*:\s*"([^"]+)".+"address"\s*:\s*"([^"]+)".+"mobile"\s*:\s*"([^"]+)"/);
+        
+        if (jsonMatch) {
+          const extractedData = {
+            name: jsonMatch[1],
+            organization: jsonMatch[2],
+            address: jsonMatch[3],
+            mobile: jsonMatch[4]
+          };
+          
+          return res.json({
+            success: true,
+            data: extractedData,
+            message: "successfully extracted data",
+          });
+        }
+      } catch (e) {
+        console.log("Direct extraction failed, trying OCR");
+      }
+
       const base64Data = imageBase64.replace(/^data:image\/png;base64,/, "");
       const imageBuffer = Buffer.from(base64Data, "base64");
 
@@ -56,7 +77,7 @@ app.post(
 
       await worker.setParameters({
         tessedit_char_whitelist:
-          '{}":,.-_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+',
+          '{}":,.-_\'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+ ',
         tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
       });
 
@@ -84,42 +105,69 @@ app.post(
   }
 );
 
-function improvedJsonExtract(text: string): string {
-  const standardMatch = text.match(/\{[\s\S]*\}/);
-  if (standardMatch) {
-    try {
-      const jsonObj = JSON.parse(standardMatch[0]);
-      return JSON.stringify(jsonObj);
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
+function improvedJsonExtract(text: string) {
+  console.log("Raw OCR text:", text);
+  
   try {
-    const nameRegex = /"name"\s*:\s*"([^"]*)"/;
-    const orgRegex = /"organization"\s*:\s*"([^"]*)"/;
-    const addressRegex = /"address"\s*:\s*"([^"]*)"/;
-    const mobileRegex = /"mobile"\s*:\s*"([^"]*)"/;
-
-    const nameMatch = text.match(nameRegex);
-    const orgMatch = text.match(orgRegex);
-    const addressMatch = text.match(addressRegex);
-    const mobileMatch = text.match(mobileRegex);
-
-    if (nameMatch && orgMatch && addressMatch && mobileMatch) {
-      const constructedJson = {
-        name: nameMatch[1],
-        organization: orgMatch[1],
-        address: addressMatch[1],
-        mobile: mobileMatch[1],
-      };
-
-      return JSON.stringify(constructedJson);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const jsonCandidate = jsonMatch[0]
+        .replace(/\s+/g, ' ')
+        .replace(/([''])/g, '"')
+        .replace(/(\w+)\s*:/g, '"$1":')
+        .replace(/:\s*([^",\{\}\[\]]+)(?=\s*[,\}])/g, ':"$1"');
+      
+      try {
+        return JSON.stringify(JSON.parse(jsonCandidate));
+      } catch (e) {
+        console.log("Initial JSON parse failed:", e);
+      }
     }
-
-    throw new Error("Invalid JSON pattern");
+    
+    const nameMatch = text.match(/name["']?\s*:\s*["']([^"']+)["']/i);
+    const orgMatch = text.match(/organization["']?\s*:\s*["']([^"']+)["']/i);
+    const addressMatch = text.match(/address["']?\s*:\s*["']([^"']+)["']/i);
+    const mobileMatch = text.match(/mobile["']?\s*:\s*["']([^"']+)["']/i);
+    
+    if (nameMatch || orgMatch || addressMatch || mobileMatch) {
+      const result = {
+        name: nameMatch ? nameMatch[1].trim() : "",
+        organization: orgMatch ? orgMatch[1].trim() : "",
+        address: addressMatch ? addressMatch[1].trim() : "",
+        mobile: mobileMatch ? mobileMatch[1].trim() : ""
+      };
+      
+      if (result.name && result.organization && result.address && result.mobile) {
+        return JSON.stringify(result);
+      }
+    }
+    
+    const lines = text.split(/[\n\r]+/);
+    let extractedData: {name?: string; organization?: string; address?: string; mobile?: string} = {};
+    
+    for (const line of lines) {
+      if (line.includes("name") && !extractedData.name) {
+        const match = line.match(/:\s*["']?([^"',}]+)["']?[,}]/);
+        if (match) extractedData.name = match[1].trim();
+      } else if (line.includes("organization") && !extractedData.organization) {
+        const match = line.match(/:\s*["']?([^"',}]+)["']?[,}]/);
+        if (match) extractedData.organization = match[1].trim();
+      } else if (line.includes("address") && !extractedData.address) {
+        const match = line.match(/:\s*["']?([^"',}]+)["']?[,}]/);
+        if (match) extractedData.address = match[1].trim();
+      } else if (line.includes("mobile") && !extractedData.mobile) {
+        const match = line.match(/:\s*["']?([^"',}]+)["']?[,}]/);
+        if (match) extractedData.mobile = match[1].trim();
+      }
+    }
+    
+    if (extractedData.name && extractedData.organization && extractedData.address && extractedData.mobile) {
+      return JSON.stringify(extractedData);
+    }
+    
+    throw new Error("Could not extract JSON data from image");
   } catch (error: any) {
-    throw new Error(error.message);
+    throw new Error(`JSON extraction failed: ${error.message}`);
   }
 }
 
