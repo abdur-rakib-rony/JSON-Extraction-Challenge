@@ -14,65 +14,199 @@ app.use(body_parser_1.default.json({ limit: "50mb" }));
 app.get("/", (_req, res) => {
     res.send("API is running");
 });
-const fixCommonOCRerrors = (text) => {
+// Comprehensive text normalization
+const normalizeText = (text) => {
     return text
-        .replace(/[‘’]/g, '"')
-        .replace(/"(\w+)\s*:\s*"/g, '"$1": "')
-        .replace(/"address:\s*"/g, '"address": "')
-        .replace(/,\s*\)/g, '}')
-        .replace(/\b4\b/g, '{')
-        .replace(/\b\)\b/g, '}')
-        .replace(/\bXling\b/gi, "Kling")
-        .replace(/\bWarren\b/gi, "Marren")
-        .replace(/\bNash\b/gi, "Wash")
-        .replace(/\b(\d{3})\s+(\d{3})\s+(\d{4})/g, "($1) $2-$3")
-        .replace(/\b7673\b/g, "7873")
-        .replace(/\b2149\b/g, "2109")
-        .replace(/\b7107\b/g, "7187")
-        .replace(/\\/g, "")
+        .replace(/[\r\n]+/g, " ")
         .replace(/\s+/g, " ")
-        .replace(/"\s*:/g, '":')
-        .replace(/:\s*"/g, ':"')
-        .replace(/,(\s*})/g, '$1')
-        .replace(/([{,]\s*)([a-zA-Z]+)(\s*:)/g, '$1"$2"$3')
-        .replace(/0(?=')/g, "O")
-        .replace(/\/873/g, "7873");
+        .replace(/\b([4I])\b/g, '{')
+        .replace(/\b([1I])\b/g, 'I')
+        .replace(/\b(\))\b/g, '}')
+        .replace(/['`´']/g, '"')
+        .replace(/\\/g, "")
+        .trim();
 };
-const safeJsonParse = (jsonText) => {
-    try {
-        return JSON.parse(jsonText);
-    }
-    catch (error) {
-        const repaired = jsonText
-            .replace(/"(\w+)\s*:\s*([^"][^,}]*)/g, '"$1": "$2"')
-            .replace(/({|,)\s*([a-zA-Z]+)\s*:/g, '$1"$2":')
-            .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')
-            .replace(/'/g, '"')
-            .replace(/(\w+)\s*:/g, '"$1":')
-            .replace(/,(\s*})/g, '$1')
-            .replace(/([{,]\s*)"([^"]+)"\s*:/g, '$1"$2":')
-            .replace(/}\s*{/g, '},{')
-            .replace(/(?:^|,)\s*}/g, '}')
-            .replace(/(\d{3})\s+(\d{3})\s+(\d{4})/g, "($1) $2-$3");
-        try {
-            return JSON.parse(repaired);
+const fixJsonStructure = (text) => {
+    let fixed = text;
+    fixed = fixed
+        .replace(/"name"?\s*:(\s*[^"{][^,}]*[^"}]),/g, '"name":"$1",')
+        .replace(/"organization"?\s*:(\s*[^"{][^,}]*[^"}]),/g, '"organization":"$1",')
+        .replace(/"address"?\s*:(\s*[^"{][^,}]*[^"}]),/g, '"address":"$1",')
+        .replace(/"mobile"?\s*:(\s*[^"{][^,}]*[^"}]),/g, '"mobile":"$1",')
+        .replace(/"name"?\s*:(\s*[^"{][^,}]*[^"}])\s*}/g, '"name":"$1"}')
+        .replace(/"organization"?\s*:(\s*[^"{][^,}]*[^"}])\s*}/g, '"organization":"$1"}')
+        .replace(/"address"?\s*:(\s*[^"{][^,}]*[^"}])\s*}/g, '"address":"$1"}')
+        .replace(/"mobile"?\s*:(\s*[^"{][^,}]*[^"}])\s*}/g, '"mobile":"$1"}');
+    fixed = fixed
+        .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
+        .replace(/([{,]\s*)"([^"]+)"(\s*[:])\s*([^",{}\[\]\s][^,}]*?)([,}])/g, '$1"$2"$3"$4"$5')
+        .replace(/([{,]\s*)"([^"]+)"(\s*[:])\s*([^",{}\[\]\s][^,}]*?)$/g, '$1"$2"$3"$4"')
+        .replace(/"address:\s*"/g, '"address":"')
+        .replace(/"organization:\s*"/g, '"organization":"')
+        .replace(/"name:\s*"/g, '"name":"')
+        .replace(/"mobile:\s*"/g, '"mobile":"')
+        .replace(/,\s*}/g, '}')
+        .replace(/",([^"])/g, '","$1')
+        .replace(/([^"])":/g, '$1":')
+        .replace(/"([^"]*?)([,}])/g, '"$1"$2')
+        .replace(/}([^{}"'\s,])/g, '},"$1')
+        .replace(/}\s*{/g, '},{');
+    return fixed;
+};
+const extractFieldValues = (text, fieldName) => {
+    const strategies = [
+        new RegExp(`"${fieldName}"\\s*:\\s*"([^"]+)"`, 'g'),
+        new RegExp(`${fieldName}\\s*:\\s*"([^"]+)"`, 'g'),
+        new RegExp(`"${fieldName}"\\s*:\\s*([^",}{]+)`, 'g'),
+        new RegExp(`${fieldName}\\s*:\\s*([^",}{]+)`, 'g'),
+        new RegExp(`"${fieldName}"\\s+["']?([^"'}{,]+)["']?`, 'g'),
+        new RegExp(`${fieldName}\\s+["']?([^"'}{,]+)["']?`, 'g'),
+        new RegExp(`["{]?\\s*${fieldName}\\s*["}]?\\s*[:=]\\s*["']([^"']+)["']`, 'g'),
+        new RegExp(`${fieldName}[:\\s]+([\\w\\s-\\.&,]+)(?=[a-zA-Z]{3,}:|[\\},])`, 'g')
+    ];
+    const results = [];
+    for (const regex of strategies) {
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+            if (match[1] && match[1].trim()) {
+                results.push(match[1].trim());
+            }
         }
-        catch (finalError) {
-            const fields = repaired.match(/"name":\s*"([^"]+)".*"organization":\s*"([^"]+)".*"address":\s*"([^"]+)".*"mobile":\s*"([^"]+)"/);
-            if (fields) {
+    }
+    return results;
+};
+const extractSpecificPatterns = (text) => {
+    const result = {};
+    const namePatterns = [
+        /Dr\.\s+([A-Z][a-z]+\s+[A-Z][a-z\-]+)/,
+        /Mr\.\s+([A-Z][a-z]+\s+[A-Z][a-z\-]+)/,
+        /Mrs\.\s+([A-Z][a-z]+\s+[A-Z][a-z\-]+)/,
+        /Ms\.\s+([A-Z][a-z]+\s+[A-Z][a-z\-]+)/,
+        /name\s*[:=]?\s*["']?([A-Z][a-z]+\s+[A-Z][a-z\-]+)["']?/i,
+        /["']?([A-Z][a-z]+\s+[A-Z][a-z\-]+)["']?\s*,\s*["']?([A-Za-z\s&\-]+)["']?/
+    ];
+    for (const pattern of namePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            result.name = match[1].trim();
+            break;
+        }
+    }
+    const orgPatterns = [
+        /organization\s*[:=]?\s*["']?([A-Za-z0-9\s\-&]+)["']?/i,
+        /([A-Za-z]+\s+(?:Group|LLC|Inc|Corp|Corporation|Company))/,
+        /([A-Za-z]+\s*[\-&]\s*[A-Za-z]+)/
+    ];
+    for (const pattern of orgPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            result.organization = match[1].trim();
+            break;
+        }
+    }
+    const addressPatterns = [
+        /address\s*[:=]?\s*["']?(\d+\s+[A-Za-z\.\s]+,\s*[A-Za-z]+)["']?/i,
+        /(\d+\s+[NSEW]\.?\s+\d+[a-z]+\s+[A-Za-z]+,\s*[A-Za-z]+)/,
+        /(\d+\s+[A-Za-z]+\s+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Terrace|Ter|Place|Pl|Boulevard|Blvd),\s*[A-Za-z]+)/i
+    ];
+    for (const pattern of addressPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            result.address = match[1].trim();
+            break;
+        }
+    }
+    const mobilePatterns = [
+        /mobile\s*[:=]?\s*["']?(\d{3}[\.\-\s]\d{3}[\.\-\s]\d{4}(?:\s*x\d+)?)["']?/i,
+        /(\d{3}[\.\-\s]\d{3}[\.\-\s]\d{4}(?:\s*x\d+)?)/,
+        /(\(\d{3}\)\s*\d{3}[\.\-\s]\d{4}(?:\s*x\d+)?)/,
+        /(1[\.\-\s]\d{3}[\.\-\s]\d{3}[\.\-\s]\d{4}(?:\s*x\d+)?)/
+    ];
+    for (const pattern of mobilePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            result.mobile = match[1].trim();
+            break;
+        }
+    }
+    return result;
+};
+const tryParseJson = (text) => {
+    const jsonPattern = /\{[^{}]*"name"[^{}]*"organization"[^{}]*"address"[^{}]*"mobile"[^{}]*\}/i;
+    const jsonMatch = text.match(jsonPattern);
+    if (jsonMatch) {
+        try {
+            const data = JSON.parse(jsonMatch[0]);
+            if (data.name && data.organization && data.address && data.mobile) {
                 return {
-                    name: fields[1],
-                    organization: fields[2],
-                    address: fields[3],
-                    mobile: fields[4]
+                    name: data.name,
+                    organization: data.organization,
+                    address: data.address,
+                    mobile: data.mobile
                 };
             }
-            throw new Error(`Invalid JSON structure: ${repaired}`);
+        }
+        catch (e) {
+            try {
+                const fixedJson = fixJsonStructure(jsonMatch[0]);
+                const data = JSON.parse(fixedJson);
+                if (data.name && data.organization && data.address && data.mobile) {
+                    return {
+                        name: data.name,
+                        organization: data.organization,
+                        address: data.address,
+                        mobile: data.mobile
+                    };
+                }
+            }
+            catch (e2) {
+                console.error("Fixed JSON parsing failed:", e2);
+            }
         }
     }
+    return null;
+};
+const extractData = (text) => {
+    const normalizedText = normalizeText(text);
+    const jsonData = tryParseJson(normalizedText);
+    if (jsonData) {
+        return jsonData;
+    }
+    const nameValues = extractFieldValues(normalizedText, "name");
+    const orgValues = extractFieldValues(normalizedText, "organization");
+    const addressValues = extractFieldValues(normalizedText, "address");
+    const mobileValues = extractFieldValues(normalizedText, "mobile");
+    if (nameValues.length > 0 && orgValues.length > 0 &&
+        addressValues.length > 0 && mobileValues.length > 0) {
+        return {
+            name: nameValues[0],
+            organization: orgValues[0],
+            address: addressValues[0],
+            mobile: mobileValues[0]
+        };
+    }
+    const patternData = extractSpecificPatterns(normalizedText);
+    if (patternData.name && patternData.organization &&
+        patternData.address && patternData.mobile) {
+        return {
+            name: patternData.name,
+            organization: patternData.organization,
+            address: patternData.address,
+            mobile: patternData.mobile
+        };
+    }
+    const result = {
+        name: nameValues[0] || patternData.name || "",
+        organization: orgValues[0] || patternData.organization || "",
+        address: addressValues[0] || patternData.address || "",
+        mobile: mobileValues[0] || patternData.mobile || ""
+    };
+    if (result.name && result.organization && result.address && result.mobile) {
+        return result;
+    }
+    return null;
 };
 app.post("/extract", async (req, res) => {
-    var _a, _b, _c, _d;
     try {
         const { imageBase64 } = req.body;
         if (!imageBase64) {
@@ -82,21 +216,15 @@ app.post("/extract", async (req, res) => {
                 message: "Please provide image data",
             });
         }
-        // Direct JSON extraction
-        const directMatch = imageBase64.match(/\{\s*"name"\s*:\s*"([^"]+)"[\s\S]+?"organization"\s*:\s*"([^"]+)"[\s\S]+?"address"\s*:\s*"([^"]+)"[\s\S]+?"mobile"\s*:\s*"([^"]+)"\s*\}/i);
-        if (directMatch) {
+        const directResult = extractData(imageBase64);
+        if (directResult) {
+            console.log("Direct extraction successful:", directResult);
             return res.json({
                 success: true,
-                data: {
-                    name: directMatch[1],
-                    organization: directMatch[2],
-                    address: directMatch[3],
-                    mobile: directMatch[4]
-                },
-                message: "Successfully extracted data",
+                data: directResult,
+                message: "Successfully extracted data directly from input",
             });
         }
-        // OCR Processing
         const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
         const imageBuffer = Buffer.from(base64Data, "base64");
         const worker = await (0, tesseract_js_1.createWorker)();
@@ -109,44 +237,29 @@ app.post("/extract", async (req, res) => {
         });
         const { data: { text } } = await worker.recognize(imageBuffer);
         await worker.terminate();
-        const cleanedText = fixCommonOCRerrors(text);
-        const jsonText = cleanedText
-            .replace(/(\w+)\s*:/g, '"$1":')
-            .replace(/}\s*{/g, '},{')
-            .replace(/[\r\n]+/g, ' ')
-            .replace(/.*?({.*}).*/s, '$1') || '{}';
-        try {
-            const parsedData = safeJsonParse(jsonText);
-            const extractedData = {
-                name: ((_a = parsedData.name) === null || _a === void 0 ? void 0 : _a.replace(/[^a-zA-Z\s.]/g, "").trim()) || "",
-                organization: ((_b = parsedData.organization) === null || _b === void 0 ? void 0 : _b.replace(/still/g, "skill").replace(/0'(?=\w)/g, "O'").trim()) || "",
-                address: ((_c = parsedData.address) === null || _c === void 0 ? void 0 : _c.replace(/(\d{3})\s+(\d{3})\s+(\d{4})/g, "($1) $2-$3").trim()) || "",
-                mobile: ((_d = parsedData.mobile) === null || _d === void 0 ? void 0 : _d.replace(/\s+/g, "").replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3").trim()) || ""
-            };
-            if (!extractedData.name ||
-                !extractedData.organization ||
-                !extractedData.address ||
-                !extractedData.mobile) {
-                throw new Error("Missing required fields");
+        console.log("OCR Raw Text:", text);
+        const extractedData = extractData(text);
+        if (!extractedData) {
+            const aggressivelyFixed = fixJsonStructure(normalizeText(text));
+            console.log("Aggressively fixed text:", aggressivelyFixed);
+            const lastResortData = extractData(aggressivelyFixed);
+            if (lastResortData) {
+                return res.json({
+                    success: true,
+                    data: lastResortData,
+                    message: "Successfully extracted data using aggressive fixing",
+                });
             }
-            return res.json({
-                success: true,
-                data: extractedData,
-                message: "Successfully extracted data",
-            });
+            throw new Error("Failed to extract required data from the image");
         }
-        catch (parseError) {
-            console.error("Processing Failed:", {
-                rawText: text,
-                cleanedText,
-                jsonText,
-                error: parseError
-            });
-            throw new Error("Failed to process image data. Ensure clear JSON text in image.");
-        }
+        return res.json({
+            success: true,
+            data: extractedData,
+            message: "Successfully extracted data",
+        });
     }
     catch (error) {
-        console.error("Server Error:", error.message);
+        console.error("Error:", error.message);
         return res.status(500).json({
             success: false,
             data: null,
