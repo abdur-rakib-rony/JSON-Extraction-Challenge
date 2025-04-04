@@ -92,7 +92,8 @@ const fixJsonStructure = (text: string): string => {
 
 const extractDirectFromString = (text: string): ExtractedData | null => {
   try {
-    const jsonMatch = text.match(/\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/);
+    const jsonPattern = /\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/i;
+    const jsonMatch = text.match(jsonPattern);
     
     if (jsonMatch) {
       try {
@@ -106,7 +107,19 @@ const extractDirectFromString = (text: string): ExtractedData | null => {
           };
         }
       } catch (e) {
-        // If parsing fails, continue to other methods
+        try {
+          const fixedJson = fixJsonStructure(jsonMatch[0]);
+          const jsonData = JSON.parse(fixedJson);
+          if (jsonData.name && jsonData.organization && jsonData.address && jsonData.mobile) {
+            return {
+              name: jsonData.name,
+              organization: jsonData.organization,
+              address: jsonData.address,
+              mobile: jsonData.mobile
+            };
+          }
+        } catch (e2) {
+        }
       }
     }
     
@@ -122,6 +135,159 @@ const extractDirectFromString = (text: string): ExtractedData | null => {
         address: addressMatch[1],
         mobile: mobileMatch[1]
       };
+    }
+    
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const extractBinaryJson = (base64Data: string): ExtractedData | null => {
+  try {
+    if (!base64Data) {
+      return null;
+    }
+    
+    const cleanedBase64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
+    
+    try {
+      const utf8Text = Buffer.from(cleanedBase64, 'base64').toString('utf-8');
+      
+      const jsonPattern = /\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/i;
+      const jsonMatch = utf8Text.match(jsonPattern);
+      
+      if (jsonMatch) {
+        try {
+          const data = JSON.parse(jsonMatch[0]);
+          if (data && data.name && data.organization && data.address && data.mobile) {
+            return data;
+          }
+        } catch (e) {
+          try {
+            const fixedJson = fixJsonStructure(jsonMatch[0]);
+            const data = JSON.parse(fixedJson);
+            if (data && data.name && data.organization && data.address && data.mobile) {
+              return data;
+            }
+          } catch (e2) {
+          }
+        }
+      }
+      
+      const nameMatch = extractFieldValues(utf8Text, "name");
+      const orgMatch = extractFieldValues(utf8Text, "organization");
+      const addressMatch = extractFieldValues(utf8Text, "address");
+      const mobileMatch = extractFieldValues(utf8Text, "mobile");
+      
+      if (nameMatch.length > 0 && orgMatch.length > 0 && addressMatch.length > 0 && mobileMatch.length > 0) {
+        return {
+          name: nameMatch[0],
+          organization: orgMatch[0],
+          address: addressMatch[0],
+          mobile: mobileMatch[0]
+        };
+      }
+    } catch (e) {
+    }
+    
+    try {
+      const asciiText = Buffer.from(cleanedBase64, 'base64').toString('ascii');
+      
+      const jsonPattern = /\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/i;
+      const jsonMatch = asciiText.match(jsonPattern);
+      
+      if (jsonMatch) {
+        try {
+          const data = JSON.parse(jsonMatch[0]);
+          if (data && data.name && data.organization && data.address && data.mobile) {
+            return data;
+          }
+        } catch (e) {
+          try {
+            const fixedJson = fixJsonStructure(jsonMatch[0]);
+            const data = JSON.parse(fixedJson);
+            if (data && data.name && data.organization && data.address && data.mobile) {
+              return data;
+            }
+          } catch (e2) {
+          }
+        }
+      }
+    } catch (e) {
+    }
+    
+    try {
+      const latin1Text = Buffer.from(cleanedBase64, 'base64').toString('latin1');
+      
+      const jsonPattern = /\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/i;
+      const jsonMatch = latin1Text.match(jsonPattern);
+      
+      if (jsonMatch) {
+        try {
+          const data = JSON.parse(jsonMatch[0]);
+          if (data && data.name && data.organization && data.address && data.mobile) {
+            return data;
+          }
+        } catch (e) {
+          try {
+            const fixedJson = fixJsonStructure(jsonMatch[0]);
+            const data = JSON.parse(fixedJson);
+            if (data && data.name && data.organization && data.address && data.mobile) {
+              return data;
+            }
+          } catch (e2) {
+          }
+        }
+      }
+    } catch (e) {
+    }
+    
+    const base64JsonPattern = /eyJuYW1lIjoiW14iXSsiLC/;
+    const base64Match = cleanedBase64.match(base64JsonPattern);
+    
+    if (base64Match) {
+      try {
+        const startIndex = cleanedBase64.indexOf(base64Match[0]);
+        if (startIndex >= 0) {
+          const chunkSize = 500;
+          const endIndex = Math.min(startIndex + chunkSize, cleanedBase64.length);
+          const base64Chunk = cleanedBase64.substring(startIndex, endIndex);
+          
+          const decodedChunk = Buffer.from(base64Chunk, 'base64').toString('utf-8');
+          
+          const jsonPattern = /\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/i;
+          const jsonMatch = decodedChunk.match(jsonPattern);
+          
+          if (jsonMatch) {
+            try {
+              const data = JSON.parse(jsonMatch[0]);
+              if (data && data.name && data.organization && data.address && data.mobile) {
+                return data;
+              }
+            } catch (e) {
+            }
+          }
+        }
+      } catch (e) {
+      }
+    }
+    
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const extractJsonFromBase64Request = (text: string): ExtractedData | null => {
+  try {
+    const regex = /"imageBase64"\s*:\s*"([^"]+)"/;
+    const match = text.match(regex);
+    
+    if (match && match[1]) {
+      const base64Content = match[1];
+      
+      return extractBinaryJson(base64Content);
     }
     
     return null;
@@ -263,7 +429,7 @@ const extractAddress = (text: string): string[] => {
   const patterns = [
     /"address"\s*:\s*"([^"]+)"/gi,
     /address\s*[:=]\s*"?(\d+\s+[A-Za-z]+(?:\s+[A-Za-z]+)*(?:\s*,\s*[A-Za-z]+(?:\s+[A-Za-z]+)*))"?/gi,
-    /(\d+\s+[A-Za-z]+\s+(?:Hills|Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Terrace|Ter|Place|Pl|Boulevard|Blvd)(?:\s*,\s*[A-Za-z]+(?:\s+[A-Za-z]+)*))/gi,
+    /(\d+\s+[A-Za-z]+\s+(?:Hills|Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Terrace|Ter|Place|Pl|Boulevard|Blvd|Mountain)(?:\s*,\s*[A-Za-z]+(?:\s+[A-Za-z]+)*))/gi,
     /(\d+\s+[NSEW]\.?\s+\d+[a-z]+\s+[A-Za-z]+(?:\s*,\s*[A-Za-z]+(?:\s+[A-Za-z]+)*))/gi,
     /"address"\s*:([^"]{5,50})[,}]/gi,
     /address\s*:([^"]{5,50})[,}]/gi,
@@ -338,7 +504,6 @@ const tryParseJson = (text: string): ExtractedData | null => {
           };
         }
       } catch (e2) {
-        console.error("Fixed JSON parsing failed:", e2);
       }
     }
   }
@@ -361,7 +526,6 @@ const tryParseJson = (text: string): ExtractedData | null => {
         };
       }
     } catch (e) {
-      // Continue to next match
     }
   }
   
@@ -415,8 +579,9 @@ const extractRawData = (text: string, originalText: string): ExtractedData | nul
   }
   
   const lastResortName = text.match(/[A-Z][a-z]+(?:[-\s][A-Z][a-z]+){1,2}/);
-  const lastResortOrg = text.match(/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:Group|LLC|Inc|Company)/i);
-  const lastResortAddress = text.match(/\d+\s+[A-Za-z\s\.]+,\s*[A-Za-z\s]+/);
+  const lastResortOrg = text.match(/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:Group|LLC|Inc|Company)/i) || 
+                        text.match(/[A-Z][a-z]+(?:\s*[-&]\s*[A-Z][a-z]+)/i);
+  const lastResortAddress = text.match(/\d+\s+[A-Za-z\s\.]+(?:,\s*[A-Za-z\s]+)?/);
   const lastResortMobile = text.match(/(?:1-)?[0-9]{3}[-.\s][0-9]{3}[-.\s][0-9]{4}(?:\s*x[0-9]+)?/);
   
   if (lastResortName && lastResortOrg && lastResortAddress && lastResortMobile) {
@@ -493,9 +658,16 @@ const findExactMatch = (extractedData: ExtractedData, originalText: string): Ext
 const extractData = (text: string): ExtractedData | null => {
   const originalText = text;
   
-  const directResult = extractDirectFromString(originalText);
-  if (directResult) {
-    return directResult;
+  // First try to extract directly from JSON in the request
+  const jsonRequestData = extractJsonFromBase64Request(text);
+  if (jsonRequestData) {
+    return jsonRequestData;
+  }
+  
+  // Try direct extraction from string
+  const directData = extractDirectFromString(text);
+  if (directData) {
+    return directData;
   }
   
   const normalizedText = normalizeText(text);
@@ -528,6 +700,7 @@ app.post(
         });
       }
 
+      // Try direct extraction from string first
       const directResult = extractData(imageBase64);
       if (directResult) {
         console.log("Direct extraction successful:", directResult);
@@ -538,8 +711,9 @@ app.post(
         });
       }
 
+      // If direct extraction fails, try OCR
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-      const imageBuffer = Buffer.from(base64Data, "base64");
+      const imageBuffer = Buffer.from(base64Data, 'base64');
 
       const worker = await createWorker();
       await worker.loadLanguage("eng");
@@ -556,6 +730,7 @@ app.post(
 
       console.log("OCR Raw Text:", text);
       
+      // Try to extract data from OCR text
       const extractedData = extractData(text);
       
       if (!extractedData) {
