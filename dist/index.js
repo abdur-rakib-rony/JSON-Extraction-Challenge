@@ -68,6 +68,43 @@ const fixJsonStructure = (text) => {
         .replace(/}\s*{/g, '},{');
     return fixed;
 };
+const extractDirectFromString = (text) => {
+    try {
+        const jsonMatch = text.match(/\{(?:[^{}]|"[^"]*")*"name"(?:[^{}]|"[^"]*")*"organization"(?:[^{}]|"[^"]*")*"address"(?:[^{}]|"[^"]*")*"mobile"(?:[^{}]|"[^"]*")*\}/);
+        if (jsonMatch) {
+            try {
+                const jsonData = JSON.parse(jsonMatch[0]);
+                if (jsonData.name && jsonData.organization && jsonData.address && jsonData.mobile) {
+                    return {
+                        name: jsonData.name,
+                        organization: jsonData.organization,
+                        address: jsonData.address,
+                        mobile: jsonData.mobile
+                    };
+                }
+            }
+            catch (e) {
+                // If parsing fails, continue to other methods
+            }
+        }
+        const nameMatch = text.match(/"name"\s*:\s*"([^"]+)"/);
+        const orgMatch = text.match(/"organization"\s*:\s*"([^"]+)"/);
+        const addressMatch = text.match(/"address"\s*:\s*"([^"]+)"/);
+        const mobileMatch = text.match(/"mobile"\s*:\s*"([^"]+)"/);
+        if (nameMatch && orgMatch && addressMatch && mobileMatch) {
+            return {
+                name: nameMatch[1],
+                organization: orgMatch[1],
+                address: addressMatch[1],
+                mobile: mobileMatch[1]
+            };
+        }
+        return null;
+    }
+    catch (e) {
+        return null;
+    }
+};
 const isSimilar = (str1, str2, threshold = 0.8) => {
     if (!str1 || !str2)
         return false;
@@ -389,6 +426,10 @@ const findExactMatch = (extractedData, originalText) => {
 };
 const extractData = (text) => {
     const originalText = text;
+    const directResult = extractDirectFromString(originalText);
+    if (directResult) {
+        return directResult;
+    }
     const normalizedText = normalizeText(text);
     const correctedText = correctCommonOcrErrors(normalizedText);
     const jsonData = tryParseJson(correctedText);
